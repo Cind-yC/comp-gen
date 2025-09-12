@@ -183,8 +183,7 @@ def main():
     if args.fasta_a and args.fasta_b and args.kmer:
         j = jaccard(args.fasta_a, args.fasta_b, args.kmer)
         exact, approx = ani(j, args.kmer)
-        print(f"a={args.fasta_a} b={args.fasta_b}, k={args.kmer}"
-              f"jaccard={j:.6f} ani_exact={exact:.6f} ani_approx={approx:.6f}")
+        print(f"a={args.fasta_a} b={args.fasta_b} k={args.kmer} jaccard={j:.6f} ani_exact={exact:.6f} ani_approx={approx:.6f}")
         return
 
     # mutate mode 
