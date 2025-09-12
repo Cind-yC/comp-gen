@@ -27,11 +27,11 @@ def parse_args():
     )
     
     # mutate mode 
-    parser.add_argument("-i", "--input", required=True, help="Input FASTA filename")
-    parser.add_argument("-o", "--output", required=True, help="Output FASTA filename")
-    parser.add_argument("-m", "--mutation_rate", type=float, required=True,
+    parser.add_argument("-i", "--input", help="Input FASTA filename")
+    parser.add_argument("-o", "--output", help="Output FASTA filename")
+    parser.add_argument("-m", "--mutation_rate", type=float, 
                         help="Mutation rate (e.g., 0.015 for 1.5%% of bases)")
-    parser.add_argument("-s", "--seed", type=int, required=True,
+    parser.add_argument("-s", "--seed", type=int, 
                         help="Random seed for reproducibility")
     parser.add_argument("--wrap", type=int, default=60, 
                         help="Line wrap width for FASTA output (default: 60; use 0 for no wrap)") # for better formatting 
@@ -46,7 +46,6 @@ def parse_args():
 
     # decide mode 
     jaccard_mode = (args.fasta_a is not None or args.fasta_b is not None or args.kmer is not None)
-    mutate_mode = (args.input is not None or args.output is not None or args.mutation_rate is not None or args.seed is not None)
 
     # ignore error handling for now 
     # choose jaccard_mode
@@ -186,6 +185,7 @@ def main():
         exact, approx = ani(j, args.kmer)
         print(f"a={args.fasta_a} b={args.fasta_b}, k={args.kmer}"
               f"jaccard={j:.6f} ani_exact={exact:.6f} ani_approx={approx:.6f}")
+        return
 
     # mutate mode 
     rng = random.Random(args.seed)
