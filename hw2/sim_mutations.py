@@ -17,13 +17,16 @@ specified rate
 import argparse
 import random
 import sys
+import math
 
 DNA = ('A', 'C', 'G','T') # tuple in python - fixed, never changes, just for lookup
 
 def parse_args(): 
     parser = argparse.ArgumentParser(
-        description="Introduce random substitution mutations into a FASTA file."
+        description="Either mutate FASTA or compute Jaccard/ANI."
     )
+    
+    # mutate mode 
     parser.add_argument("-i", "--input", required=True, help="Input FASTA filename")
     parser.add_argument("-o", "--output", required=True, help="Output FASTA filename")
     parser.add_argument("-m", "--mutation_rate", type=float, required=True,
@@ -32,9 +35,31 @@ def parse_args():
                         help="Random seed for reproducibility")
     parser.add_argument("--wrap", type=int, default=60, 
                         help="Line wrap width for FASTA output (default: 60; use 0 for no wrap)") # for better formatting 
+   
+    # jaccard mode 
+    parser.add_argument("-a", "--fasta_a", help="FASTA A (jaccard mode)")
+    parser.add_argument("-b", "--fasta_b", help="FASTA B (jaccard mode)")
+    parser.add_argument("-k", "--kmer", type=int, help="k-mer length (jaccard mode)")
+   
     args = parser.parse_args() # collects flags/values & puts them into the args object 
     # e.g. args.input = "input.fa", args.mutation_rate = 0.01, etc. 
 
+    # decide mode 
+    jaccard_mode = (args.fasta_a is not None or args.fasta_b is not None or args.kmer is not None)
+    mutate_mode = (args.input is not None or args.output is not None or args.mutation_rate is not None or args.seed is not None)
+
+    # ignore error handling for now 
+    # choose jaccard_mode
+    if jaccard_mode:
+        if not (args.fasta_a and args.fasta_b and args.kmer):
+            parser.error("Jaccard mode requires 2 fasta files & kmer")
+        if args.kmer <= 0:
+            parser.error("kmer length must be > 0.")
+        return args
+    
+    # choose mutate mode:
+    if not (args.input and args.output and args.mutation_rate is not None and args.seed is not None):
+        parser.error("mutate mode requires input, output, rate and seed.")
     if not(0.0 <= args.mutation_rate <= 1.0):
         parser.error("Mutation rate must be between 0.0 and 1.0")
     return args
@@ -102,10 +127,68 @@ def mutate_sequence(seq, rate, rng):
     
     return "".join(seq_list)
 
+def clean_seq(seq: str) -> str:
+    """
+    upper case, map non-ACGT to N
+    """
+    s = seq.upper()
+    return "".join(ch if ch in DNA else "N" for ch in s)
+
+def kmer_set(seq:str, k:int) -> set:
+    """
+    return set of all k-mers (length k) from seq that contain only ACGT. any kmer w N is skipped
+    """
+    if k <= 0 or len(seq) < k:
+        return set()
+    s = clean_seq(seq)
+    out = set()
+    for i in range(len(s) - k + 1):
+        kmer = s[i:i+k]
+        if "N" in kmer:
+            continue 
+        out.add(kmer)
+    return out
+
+def jaccard(path_a:str, path_b:str, k:int) -> float:
+    """
+    compute jaccard between kmer sets
+    """
+    seq_a = "".join(seq for _h, seq in read_fasta(path_a))
+    seq_b = "".join(seq for _h, seq in read_fasta(path_b))
+
+    A = kmer_set(seq_a, k)
+    B = kmer_set(seq_b, k)
+    if not A and not B:
+        return 0.0
+    inter = len(A & B)
+    union = len(A | B)
+    return inter/union if union else 0.0
+
+def ani(j:float,k:int) -> tuple[float, float]:
+    """
+    return exact ani and approx ani from jaccard and k 
+    exact ANI = J**(1/k)
+    approx ANI = 1 + (ln J)/k
+    """
+    if j <= 0.0:
+        return 0.0, 0.0
+    exact = j ** (1.0 / k)
+    approx = 1.0 + (math.log(j) / k)
+    approx = max(0.0, min(1.0, approx))
+    return exact, approx
+
+
 def main():
     args = parse_args()
-    rng = random.Random(args.seed)
+    # jaccard mode
+    if args.fasta_a and args.fasta_b and args.kmer:
+        j = jaccard(args.fasta_a, args.fasta_b, args.kmer)
+        exact, approx = ani(j, args.kmer)
+        print(f"a={args.fasta_a} b={args.fasta_b}, k={args.kmer}"
+              f"jaccard={j:.6f} ani_exact={exact:.6f} ani_approx={approx:.6f}")
 
+    # mutate mode 
+    rng = random.Random(args.seed)
     records = list(read_fasta(args.input))
     if not records:
         sys.stderr.write("ERROR: No FASTA records found in input.\n")
